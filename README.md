@@ -986,15 +986,16 @@ StrataScan is a single-file, dependency-light Python 3.9+ tool built entirely on
 
 ```bash
 # Clone
-git clone https://github.com/your-org/stratascan.git
-cd stratascan
+git clone https://github.com/S
+sylhetyhackvenger/STRATASCAN
+cd STRATASCAN 
 
 # (Optional) create an isolated environment
 python3 -m venv .venv
 source .venv/bin/activate
 
 # No third-party dependencies required — standard library only
-python3 stratascan.py --help
+python3 StrataScan.py
 ```
 
 ### Requirements
@@ -1013,7 +1014,7 @@ python3 stratascan.py --help
 ### Quick start (TUI)
 
 ```bash
-python3 stratascan.py
+python3 StrataScan.py
 ```
 
 Then, inside the dashboard:
@@ -1026,7 +1027,7 @@ run
 ### Quick start (CLI / scriptable)
 
 ```bash
-python3 stratascan.py example.com --report html --out ./reports
+python3 StrataScan.py example.com --report html --out ./reports
 ```
 
 ### Scoped scan — passive only, secrets + subdomains
@@ -1138,7 +1139,7 @@ Understanding what StrataScan **does and does not** expose a target to is essent
 
 > **StrataScan is a dual-use reconnaissance tool. Authorization, not intent, is what makes a scan lawful.**
 
-- Only run StrataScan against domains you **own**, or for which you have **explicit, documented, written authorization** (a bug-bounty program's published scope, a signed penetration-testing agreement, or equivalent).
+- Only run StrataScan against domains you **OWN**, or for which you have **explicit, documented, written authorization** (a bug-bounty program's published scope, a signed penetration-testing agreement, or equivalent).
 - Historical secrets recovered from archives are often still live. Follow **responsible disclosure** norms: report to the asset owner, do not use discovered credentials, and give reasonable remediation time before any public disclosure.
 - Zone-transfer (`AXFR`) and wildcard-DNS probing are standard, passive-from-a-network-perspective diagnostic queries — but running them outside an authorized scope can still violate acceptable-use policies or local law. Scope discipline applies to every phase, not just the obviously "active" ones.
 - Respect the acceptable-use terms of every third-party data source StrataScan queries (Wayback Machine / Internet Archive, Common Crawl, archive.today, Certificate Transparency log operators, passive-DNS providers). The built-in rate limiting and jitter exist to help with this, not to replace reading those terms yourself.
@@ -1795,7 +1796,7 @@ and without warranty of any kind.
 
 **[⬆ Back to top](#)**
 
-Built for authorized researchers, red teamers, and defenders who believe
+Built for authorized researchers, GRAY teamers, and defenders who believe
 history doesn't get a pass just because it's old.
 
 `// END OF TRANSMISSION //`
