@@ -211,25 +211,27 @@ flowchart TB
 mindmap
   root((StrataScan Core))
     Acquisition
-      CDX / Timemap pulls
-      Live HTTP/TLS/TCP probes
-      Proxy + UA rotation
-      Rate limiting & jitter
+      "CDX and Timemap pulls"
+      "Live HTTP, TLS, TCP probes"
+      "Proxy and UA rotation"
+      "Rate limiting and jitter"
     Normalization
-      Multi-format parsing
-      Recursive decoding
-      Light JS deobfuscation
+      "Multi-format parsing"
+      "Recursive decoding"
+      "Light JS deobfuscation"
     Correlation
-      Temporal diffing
-      Secret detection + entropy gate
-      Severity scoring
-      SQLite evidence cache
+      "Temporal diffing"
+      "Secret detection and entropy gate"
+      "Severity scoring"
+      "SQLite evidence cache"
     Presentation
-      Curses TUI dashboard
-      Scriptable CLI
-      Multi-format reports
-      Raw evidence export
+      "Curses TUI dashboard"
+      "Scriptable CLI"
+      "Multi-format reports"
+      "Raw evidence export"
 ```
+
+> If your Mermaid renderer still fails on the mindmap above specifically, it's most likely because that renderer's Mermaid version predates `mindmap` support (added in Mermaid v9.3) — flowcharts, sequence diagrams, and class diagrams are far more universally supported than mindmap/pie if you need a fallback.
 
 ### Component Interaction (Class-Level View)
 
@@ -241,16 +243,16 @@ classDiagram
         +emit(tag, msg, dedupe)
     }
     class PhaseEngine {
-        +PHASE_IDS: list~str~
-        +phase_enabled(name) bool
-        +show_phases()
+        +phaseIds : List
+        +phaseEnabled(name) bool
+        +showPhases()
     }
     class CapabilityCatalog {
-        +CAPABILITY_CATALOG: list
-        +show_capability_catalog()
+        +capabilityList : List
+        +showCapabilityCatalog()
     }
     class Selection {
-        +selected: OrderedDict
+        +selected : OrderedDict
         +add(serial, name, desc)
         +snapshot()
     }
@@ -259,19 +261,19 @@ classDiagram
         +rotate()
     }
     class JitterController {
-        +jitter_status()
-        +min/max window
+        +jitterStatus()
+        +jitterWindow : Range
     }
     class EvidenceCache {
-        +SQLite backend
-        +findings.jsonl
-        +raw_snapshots/
+        +backend : SQLite
+        +findingsLog : File
+        +rawSnapshots : Directory
     }
     class ReportEngine {
-        +to_json()
-        +to_csv()
-        +to_html()
-        +to_txt()
+        +toJson()
+        +toCsv()
+        +toHtml()
+        +toTxt()
     }
 
     PhaseEngine --> CapabilityCatalog : gates execution of
@@ -629,7 +631,7 @@ pie showData
 
 ## ⚔️ Offensive Capability Profile
 
-This section describes StrataScan's value to an **authorized Gray-Team operator, bug-bounty researcher, or penetration tester** mapping a target's attack surface. Every capability listed here is passive-source or read-only-active; none of it performs exploitation.
+This section describes StrataScan's value to an **authorized red-team operator, bug-bounty researcher, or penetration tester** mapping a target's attack surface. Every capability listed here is passive-source or read-only-active; none of it performs exploitation.
 
 ### 6.1 Attack-surface cartography
 
@@ -714,11 +716,11 @@ Because acquisition is archive-first, an operator can build a near-complete pict
 
 ## 🛡 Defensive & Protective Behavior
 
-StrataScan is equally designed as a **self-audit and gray-team instrument**. Every offensive capability above has a mirrored defensive use: an organization running StrataScan against its own domains discovers exactly what an attacker using the same tool would discover — before they do.
+StrataScan is equally designed as a **self-audit and blue-team instrument**. Every offensive capability above has a mirrored defensive use: an organization running StrataScan against its own domains discovers exactly what an attacker using the same tool would discover — before they do.
 
 ### 7.1 Defensive use cases
 
-| Gray-Team Question | How StrataScan Answers It |
+| Blue-Team Question | How StrataScan Answers It |
 |---|---|
 | "Did we ever leak a credential, even briefly?" | Full historical secret scan across every archived snapshot, not just the current site |
 | "Is any decommissioned subdomain still pointing at a resource we no longer control?" | Takeover probing across the entire historical subdomain set |
@@ -986,16 +988,15 @@ StrataScan is a single-file, dependency-light Python 3.9+ tool built entirely on
 
 ```bash
 # Clone
-git clone https://github.com/S
-sylhetyhackvenger/STRATASCAN
-cd STRATASCAN 
+git clone https://github.com/your-org/stratascan.git
+cd stratascan
 
 # (Optional) create an isolated environment
 python3 -m venv .venv
 source .venv/bin/activate
 
 # No third-party dependencies required — standard library only
-python3 StrataScan.py
+python3 stratascan.py --help
 ```
 
 ### Requirements
@@ -1014,7 +1015,7 @@ python3 StrataScan.py
 ### Quick start (TUI)
 
 ```bash
-python3 StrataScan.py
+python3 stratascan.py
 ```
 
 Then, inside the dashboard:
@@ -1027,7 +1028,7 @@ run
 ### Quick start (CLI / scriptable)
 
 ```bash
-python3 StrataScan.py example.com --report html --out ./reports
+python3 stratascan.py example.com --report html --out ./reports
 ```
 
 ### Scoped scan — passive only, secrets + subdomains
@@ -1139,7 +1140,7 @@ Understanding what StrataScan **does and does not** expose a target to is essent
 
 > **StrataScan is a dual-use reconnaissance tool. Authorization, not intent, is what makes a scan lawful.**
 
-- Only run StrataScan against domains you **OWN**, or for which you have **explicit, documented, written authorization** (a bug-bounty program's published scope, a signed penetration-testing agreement, or equivalent).
+- Only run StrataScan against domains you **own**, or for which you have **explicit, documented, written authorization** (a bug-bounty program's published scope, a signed penetration-testing agreement, or equivalent).
 - Historical secrets recovered from archives are often still live. Follow **responsible disclosure** norms: report to the asset owner, do not use discovered credentials, and give reasonable remediation time before any public disclosure.
 - Zone-transfer (`AXFR`) and wildcard-DNS probing are standard, passive-from-a-network-perspective diagnostic queries — but running them outside an authorized scope can still violate acceptable-use policies or local law. Scope discipline applies to every phase, not just the obviously "active" ones.
 - Respect the acceptable-use terms of every third-party data source StrataScan queries (Wayback Machine / Internet Archive, Common Crawl, archive.today, Certificate Transparency log operators, passive-DNS providers). The built-in rate limiting and jitter exist to help with this, not to replace reading those terms yourself.
@@ -1148,7 +1149,7 @@ Understanding what StrataScan **does and does not** expose a target to is essent
 
 ```mermaid
 flowchart TD
-    A["Before running StrataScan\nagainst any domain"] --> B{Do you own it,\nor have written\nauthorization?}
+    A["Before running StrataScan\nagainst any domain"] --> B{"Do you own it,\nor have written\nauthorization?"}
     B -->|Yes| C["✅ Proceed within\ndefined scope"]
     B -->|No| D["🛑 Do not scan"]
     C --> E{Finding involves\na live secret?}
@@ -1796,7 +1797,7 @@ and without warranty of any kind.
 
 **[⬆ Back to top](#)**
 
-Built for authorized researchers, GRAY teamers, and defenders who believe
+Built for authorized researchers, red teamers, and defenders who believe
 history doesn't get a pass just because it's old.
 
 `// END OF TRANSMISSION //`
