@@ -714,11 +714,11 @@ Because acquisition is archive-first, an operator can build a near-complete pict
 
 ## 🛡 Defensive & Protective Behavior
 
-StrataScan is equally designed as a **self-audit and blue-team instrument**. Every offensive capability above has a mirrored defensive use: an organization running StrataScan against its own domains discovers exactly what an attacker using the same tool would discover — before they do.
+StrataScan is equally designed as a **self-audit and gray-team instrument**. Every offensive capability above has a mirrored defensive use: an organization running StrataScan against its own domains discovers exactly what an attacker using the same tool would discover — before they do.
 
 ### 7.1 Defensive use cases
 
-| Blue-Team Question | How StrataScan Answers It |
+| Gray-Team Question | How StrataScan Answers It |
 |---|---|
 | "Did we ever leak a credential, even briefly?" | Full historical secret scan across every archived snapshot, not just the current site |
 | "Is any decommissioned subdomain still pointing at a resource we no longer control?" | Takeover probing across the entire historical subdomain set |
