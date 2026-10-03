@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/1.png" alt="Banner 1" width="100%">
+</p>
+
 <div align="center">
 
 ```
@@ -322,6 +326,10 @@ flowchart LR
 ```
 
 ---
+
+<p align="center">
+  <img src="assets/2.png" alt="Banner 2" width="100%">
+</p>
 
 ## The Capability Catalog
 
