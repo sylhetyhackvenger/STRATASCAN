@@ -629,7 +629,7 @@ pie showData
 
 ## ⚔️ Offensive Capability Profile
 
-This section describes StrataScan's value to an **authorized red-team operator, bug-bounty researcher, or penetration tester** mapping a target's attack surface. Every capability listed here is passive-source or read-only-active; none of it performs exploitation.
+This section describes StrataScan's value to an **authorized Gray-Team operator, bug-bounty researcher, or penetration tester** mapping a target's attack surface. Every capability listed here is passive-source or read-only-active; none of it performs exploitation.
 
 ### 6.1 Attack-surface cartography
 
