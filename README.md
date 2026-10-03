@@ -157,55 +157,142 @@ This asymmetry — defenders forget, but archives don't — is the core thesis o
 
 StrataScan is organized as a layered engine: an **acquisition layer** that pulls data from archive and live sources, a **normalization layer** that reconciles formats, a **correlation layer** that performs diffing and scoring, and a **presentation layer** that drives both the TUI dashboard and static report artifacts.
 
-```text
-Diagram (flow):
-  🌐 EXTERNAL DATA SOURCES --> ⚙️ ACQUISITION LAYER
-  ⚙️ ACQUISITION LAYER --> 🧮 NORMALIZATION LAYER
-  🧮 NORMALIZATION LAYER --> 🧠 CORRELATION & SCORING LAYER
-  🧠 CORRELATION & SCORING LAYER --> SQLite Local Cache
-  SQLite Local Cache --> 🧠 CORRELATION & SCORING LAYER
-  🧠 CORRELATION & SCORING LAYER --> 📤 PRESENTATION LAYER
+```mermaid
+flowchart TB
+    subgraph SOURCES["🌐 EXTERNAL DATA SOURCES"]
+        direction LR
+        WB["Wayback Machine\nCDX / Timemap"]
+        CC["Common Crawl\nIndex API"]
+        AT["archive.today\nMirror Lookup"]
+        CT["Certificate\nTransparency Logs"]
+        DNS_S["Authoritative DNS\n+ Passive DNS"]
+        LIVE["Live Target\nHTTP(S) / TLS / TCP"]
+    end
+
+    subgraph ACQ["⚙️ ACQUISITION LAYER"]
+        direction LR
+        FETCH["Concurrent Fetch Pool\n(thread-bounded)"]
+        UA["User-Agent\nRotation"]
+        PROXY["Proxy Rotation\nPool"]
+        RATE["Token-Bucket\nRate Limiter"]
+        JITTER["Adaptive Jitter\n(archive.org friendly)"]
+    end
+
+    subgraph NORM["🧮 NORMALIZATION LAYER"]
+        direction LR
+        PARSE["Format Parsers\nHTML / JSON / PDF / ZIP / SQL"]
+        DECODE["Recursive Decoders\nBase64 / Hex / atob"]
+        DEOB["JS Deobfuscation\n(light walk)"]
+    end
+
+    subgraph CORR["🧠 CORRELATION & SCORING LAYER"]
+        direction LR
+        DIFF["Temporal Diff Engine\n(adjacent / first-last / live)"]
+        SECSCAN["Secret Pattern\n+ Entropy Gate"]
+        SCORE["Severity Scoring\n(context × rotation × entropy)"]
+        CACHE[("SQLite Local Cache")]
+    end
+
+    subgraph OUT["📤 PRESENTATION LAYER"]
+        direction LR
+        TUI["Interactive TUI\n(curses dashboard)"]
+        CLI["Scriptable CLI"]
+        REPORTS["JSON / CSV / HTML / TXT\nReports"]
+        RAW["Raw Evidence Bundle\nfindings.jsonl + snapshots"]
+    end
+
+    SOURCES --> ACQ
+    ACQ --> NORM
+    NORM --> CORR
+    CORR --> CACHE
+    CACHE --> CORR
+    CORR --> OUT
+
+    style SOURCES fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
+    style ACQ fill:#0a0e14,stroke:#9d4dff,color:#f0e6ff
+    style NORM fill:#0a0e14,stroke:#f5a623,color:#fff3e0
+    style CORR fill:#0a0e14,stroke:#ff2d95,color:#ffe6f2
+    style OUT fill:#0a0e14,stroke:#39ff14,color:#eaffea
 ```
 
 ### Layer Responsibilities
 
-```text
-Diagram (mindmap):
-  - rootStrataScan Core
-    - Acquisition
-      - CDX and Timemap pulls
-      - Live HTTP, TLS, TCP probes
-      - Proxy and UA rotation
-      - Rate limiting and jitter
-    - Normalization
-      - Multi-format parsing
-      - Recursive decoding
-      - Light JS deobfuscation
-    - Correlation
-      - Temporal diffing
-      - Secret detection and entropy gate
-      - Severity scoring
-      - SQLite evidence cache
-    - Presentation
-      - Curses TUI dashboard
-      - Scriptable CLI
-      - Multi-format reports
-      - Raw evidence export
+```mermaid
+mindmap
+  root((StrataScan Core))
+    Acquisition
+      "CDX and Timemap pulls"
+      "Live HTTP, TLS, TCP probes"
+      "Proxy and UA rotation"
+      "Rate limiting and jitter"
+    Normalization
+      "Multi-format parsing"
+      "Recursive decoding"
+      "Light JS deobfuscation"
+    Correlation
+      "Temporal diffing"
+      "Secret detection and entropy gate"
+      "Severity scoring"
+      "SQLite evidence cache"
+    Presentation
+      "Curses TUI dashboard"
+      "Scriptable CLI"
+      "Multi-format reports"
+      "Raw evidence export"
 ```
 
-> All diagrams in this document are rendered as plain text, so they display correctly in every Markdown viewer, terminal, and Git host — no Mermaid renderer required.
+> If your Mermaid renderer still fails on the mindmap above specifically, it's most likely because that renderer's Mermaid version predates `mindmap` support (added in Mermaid v9.3) — flowcharts, sequence diagrams, and class diagrams are far more universally supported than mindmap/pie if you need a fallback.
 
 ### Component Interaction (Class-Level View)
 
-```text
-Diagram (flow):
-  PhaseEngine --> CapabilityCatalog
-  Selection --> CapabilityCatalog
-  PhaseEngine --> Telemetry
-  ProxyPool --> Telemetry
-  JitterController --> ProxyPool
-  PhaseEngine --> EvidenceCache
-  EvidenceCache --> ReportEngine
+```mermaid
+classDiagram
+    class Telemetry {
+        +bind(sink)
+        +unbind()
+        +emit(tag, msg, dedupe)
+    }
+    class PhaseEngine {
+        +phaseIds : List
+        +phaseEnabled(name) bool
+        +showPhases()
+    }
+    class CapabilityCatalog {
+        +capabilityList : List
+        +showCapabilityCatalog()
+    }
+    class Selection {
+        +selected : OrderedDict
+        +add(serial, name, desc)
+        +snapshot()
+    }
+    class ProxyPool {
+        +status()
+        +rotate()
+    }
+    class JitterController {
+        +jitterStatus()
+        +jitterWindow : Range
+    }
+    class EvidenceCache {
+        +backend : SQLite
+        +findingsLog : File
+        +rawSnapshots : Directory
+    }
+    class ReportEngine {
+        +toJson()
+        +toCsv()
+        +toHtml()
+        +toTxt()
+    }
+
+    PhaseEngine --> CapabilityCatalog : gates execution of
+    Selection --> CapabilityCatalog : filters
+    PhaseEngine --> Telemetry : streams status
+    ProxyPool --> Telemetry : reports health
+    JitterController --> ProxyPool : paces requests
+    PhaseEngine --> EvidenceCache : persists findings
+    EvidenceCache --> ReportEngine : feeds
 ```
 
 ---
@@ -229,15 +316,19 @@ A local SQLite cache means a scan can be interrupted, resumed, or re-run without
 ### 5. Archive-respectful by default
 Because the primary data source — the Wayback Machine — is a shared public good run by a nonprofit, StrataScan enforces **adaptive jitter** and **conservative concurrency** against archive.org endpoints by default. Aggressive scanning against the live target is opt-in; being a good citizen of the archive ecosystem is not.
 
-```text
-Diagram (flow):
-  Passive-only / or Active? --(Passive)--> Archive-only acquisition / zero target packets
-  Passive-only / or Active? --(Active)--> Archive acquisition / + live verification
-  Archive-only acquisition / zero target packets --> Evidence-graded / findings
-  Archive acquisition / + live verification --> Evidence-graded / findings
-  Evidence-graded / findings --> Severity scoring / + provenance
-  Severity scoring / + provenance --> Cached in SQLite
-  Cached in SQLite --> Report synthesis
+```mermaid
+flowchart LR
+    A["Operator Intent"] --> B{"Passive-only\nor Active?"}
+    B -->|Passive| C["Archive-only acquisition\nzero target packets"]
+    B -->|Active| D["Archive acquisition\n+ live verification"]
+    C --> E["Evidence-graded\nfindings"]
+    D --> E
+    E --> F["Severity scoring\n+ provenance"]
+    F --> G["Cached in SQLite"]
+    G --> H["Report synthesis"]
+
+    style A fill:#0a0e14,stroke:#39ff14,color:#eaffea
+    style H fill:#0a0e14,stroke:#ff2d95,color:#ffe6f2
 ```
 
 ---
@@ -246,17 +337,17 @@ Diagram (flow):
 
 StrataScan ships **198 individually selectable capabilities**, organized into 8 functional domains. Every capability can be toggled independently via the `select` command, and selecting any capability automatically pulls in whatever pipeline phases it depends on.
 
-```text
-Diagram:
-  title Capability Distribution by Domain
-  Client-Side and App Intelligence" : 57
-  Network DNS and Transport" : 34
-  Secret and Credential Detection" : 26
-  Correlation and Temporal Analytics" : 22
-  Archive and Historical Intelligence" : 20
-  Content and Binary Forensics" : 16
-  Subdomain and Surface Expansion" : 11
-  Reporting and Evidence" : 11
+```mermaid
+pie
+    title Capability Distribution by Domain
+    "Client-Side and App Intelligence" : 57
+    "Network DNS and Transport" : 34
+    "Secret and Credential Detection" : 26
+    "Correlation and Temporal Analytics" : 22
+    "Archive and Historical Intelligence" : 20
+    "Content and Binary Forensics" : 16
+    "Subdomain and Surface Expansion" : 11
+    "Reporting and Evidence" : 11
 ```
 
 ### 5.1 Archive & Historical Intelligence
@@ -561,19 +652,24 @@ StrataScan's primary offensive value is producing a **more complete attack surfa
 - Forms and parameters that existed on a since-redesigned page, useful for understanding legacy backend behavior.
 - Subdomains eligible for **takeover** — a DNS record still points at a de-provisioned cloud resource (S3 bucket, Heroku app, Azure endpoint, etc.).
 
-```text
-Diagram (flow):
-  Target Domain --> Certificate Transparency / SAN enumeration
-  Target Domain --> Permutation engine / dev- / staging- / api- / v2-
-  Target Domain --> Wordlist brute-force / (DNS resolution
-  CDX + Common Crawl / historical subdomain pull --> Unified Subdomain Set
-  Certificate Transparency / SAN enumeration --> Unified Subdomain Set
-  Permutation engine / dev- / staging- / api- / v2- --> Unified Subdomain Set
-  Wordlist brute-force / (DNS resolution --> Unified Subdomain Set
-  Unified Subdomain Set --> Live DNS / resolves?
-  Live DNS / resolves? --(Yes, CNAME to\ndead resource)--> 🎯 Takeover Candidate
-  Live DNS / resolves? --(Yes, normal)--> Live Asset / → further recon
-  Live DNS / resolves? --(No)--> Dead / Historical Only / → still useful for OSINT
+```mermaid
+flowchart TD
+    T["Target Domain"] --> A["CDX + Common Crawl\nhistorical subdomain pull"]
+    T --> B["Certificate Transparency\nSAN enumeration"]
+    T --> C["Permutation engine\ndev- / staging- / api- / v2-"]
+    T --> D["Wordlist brute-force\n(DNS resolution)"]
+    A --> E["Unified Subdomain Set"]
+    B --> E
+    C --> E
+    D --> E
+    E --> F{"Live DNS\nresolves?"}
+    F -->|"Yes, CNAME to\ndead resource"| G["🎯 Takeover Candidate"]
+    F -->|"Yes, normal"| H["Live Asset\n→ further recon"]
+    F -->|No| I["Dead / Historical Only\n→ still useful for OSINT"]
+
+    style G fill:#3a0a0a,stroke:#ff3b3b,color:#ffd6d6
+    style H fill:#0a2a0a,stroke:#39ff14,color:#eaffea
+    style I fill:#0a0e14,stroke:#888,color:#ccc
 ```
 
 ### 6.2 Historical secret archaeology
@@ -582,24 +678,25 @@ The single highest-leverage offensive capability: **secrets don't need to still 
 
 StrataScan's secret pipeline:
 
-```text
-Diagram:
-  participant CDX as CDX Index
-  participant F as FetchPool
-  participant P as PatternEngine
-  participant E as EntropyGate
-  participant S as SeverityScorer
-  participant C as EvidenceCache
-  CDX->>F: every archived URL for domain
-  F->>F: fetch archived body content
-  F->>P: raw body content
-  P->>P: regex match against secret patterns
-  P->>E: candidate matches
-  E->>E: reject low entropy placeholder matches
-  E->>S: high confidence secret
-  S->>S: compute composite severity score
-  S->>C: persist with first and last seen provenance
-  C-->>CDX: feeds baseline diff on next scan
+```mermaid
+sequenceDiagram
+    participant CDX as CDX Index
+    participant F as FetchPool
+    participant P as PatternEngine
+    participant E as EntropyGate
+    participant S as SeverityScorer
+    participant C as EvidenceCache
+
+    CDX->>F: every archived URL for domain
+    F->>F: fetch archived body content
+    F->>P: raw body content
+    P->>P: regex match against secret patterns
+    P->>E: candidate matches
+    E->>E: reject low entropy placeholder matches
+    E->>S: high confidence secret
+    S->>S: compute composite severity score
+    S->>C: persist with first and last seen provenance
+    C-->>CDX: feeds baseline diff on next scan
 ```
 
 Specific offensive detection classes include live JWT claim extraction (issuer/audience/role/expiry), basic-auth URLs (`user:pass@host`), cloud metadata endpoint leaks (`169.254.169.254`), framework-specific config parsing (`wp-config.php`, Django `settings.py`, `docker-compose` environment blocks), and hashed-credential fingerprinting (bcrypt/argon2/scrypt/pbkdf2/md5crypt) for offline crackability assessment.
@@ -647,14 +744,23 @@ StrataScan is equally designed as a **self-audit and Gray-Team instrument**. Eve
 
 StrataScan embeds several behaviors whose purpose is to prevent the tool itself from becoming a nuisance or liability:
 
-```text
-Diagram (flow):
-  Token Bucket Rate Limiter per host --> No exploitation no disruption full reproducibility
-  Adaptive Jitter against archive dot org --> No exploitation no disruption full reproducibility
-  Read Only Active Probes no exploitation --> No exploitation no disruption full reproducibility
-  Ignore File Scope Control --> No exploitation no disruption full reproducibility
-  Local Cache avoids redundant requests --> No exploitation no disruption full reproducibility
-  Full Audit Trail every request logged --> No exploitation no disruption full reproducibility
+```mermaid
+flowchart LR
+    RL[Token Bucket Rate Limiter per host]
+    JT[Adaptive Jitter against archive dot org]
+    RO[Read Only Active Probes no exploitation]
+    IG[Ignore File Scope Control]
+    SC[Local Cache avoids redundant requests]
+    LG[Full Audit Trail every request logged]
+
+    RL --> RESULT[No exploitation no disruption full reproducibility]
+    JT --> RESULT
+    RO --> RESULT
+    IG --> RESULT
+    SC --> RESULT
+    LG --> RESULT
+
+    style RESULT fill:#0a1a0a,stroke:#00ffa3,color:#eaffea
 ```
 
 - **Rate limiting** — a token-bucket limiter is applied per host, preventing any single target (or the archive.org API) from receiving burst traffic.
@@ -676,13 +782,18 @@ Because the secret-detection engine inevitably surfaces live, sensitive material
 
 ### 7.4 Why offense and defense are the same code path here
 
-```text
-Diagram (flow):
-  StrataScan Engine identical code path --> Gray-Team Operator
-  Gray-Team Operator --> Finds exploitable gaps before anyone else does
-  Finds exploitable gaps before anyone else does --> Same severity scored finding set
-  Same severity scored finding set --> Used for authorized offensive discovery
-  Same severity scored finding set --> Used for organizational self-audit
+```mermaid
+flowchart TB
+    ENGINE[StrataScan Engine identical code path]
+    ENGINE --> GT[Gray-Team Operator]
+    GT --> FIND[Finds exploitable gaps before anyone else does]
+    FIND --> SAME[Same severity scored finding set]
+    SAME --> USE1[Used for authorized offensive discovery]
+    SAME --> USE2[Used for organizational self-audit]
+
+    style ENGINE fill:#0a0e14,stroke:#9d4dff,color:#f0e6ff
+    style GT fill:#0a0e14,stroke:#f5a623,color:#fff3e0
+    style SAME fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
 ```
 
 The tool makes no assumption about operator intent. A single Gray-Team operator — one person, one engine, one methodology — moves between offensive discovery and defensive audit on the same run. What determines whether that run counts as "offensive" or "defensive" is **authorization and target ownership** — covered in [Legal & Ethical Use](#-legal--ethical-use) — not any difference in the underlying mechanism.
@@ -746,13 +857,27 @@ StrataScan executes a fixed-order **48-phase pipeline**. Each phase is independe
 
 ### Pipeline flow, by stage
 
-```text
-Diagram (flow):
-  Stage 1 Acquisition phases 1 to 10 --> Stage 2 Content Parsing phases 11 to 17
-  Stage 2 Content Parsing phases 11 to 17 --> Stage 3 Forensics and Discovery phases 18 to 27
-  Stage 3 Forensics and Discovery phases 18 to 27 --> Stage 4 Expansion and Correlation phases 28 to 37
-  Stage 4 Expansion and Correlation phases 28 to 37 --> Stage 5 Advanced Correlation phases 38 to 43
-  Stage 5 Advanced Correlation phases 38 to 43 --> Stage 6 Evidence and Reporting phases 44 to 47
+```mermaid
+flowchart TD
+    S1[Stage 1 Acquisition phases 1 to 10]
+    S2[Stage 2 Content Parsing phases 11 to 17]
+    S3[Stage 3 Forensics and Discovery phases 18 to 27]
+    S4[Stage 4 Expansion and Correlation phases 28 to 37]
+    S5[Stage 5 Advanced Correlation phases 38 to 43]
+    S6[Stage 6 Evidence and Reporting phases 44 to 47]
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S5 --> S6
+
+    style S1 fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
+    style S2 fill:#0a0e14,stroke:#9d4dff,color:#f0e6ff
+    style S3 fill:#0a0e14,stroke:#ff2d95,color:#ffe6f2
+    style S4 fill:#0a0e14,stroke:#f5a623,color:#fff3e0
+    style S5 fill:#0a0e14,stroke:#39ff14,color:#eaffea
+    style S6 fill:#0a0e14,stroke:#ff3b3b,color:#ffd6d6
 ```
 
 *(Stage content: Stage 1 covers CDX, live status, headers, TLS/DNS, CT logs, WHOIS, and passive DNS. Stage 2 covers special files, robots/sitemap, JS bundles, source maps, and deobfuscation. Stage 3 covers deletion forensics, takeover probing, snapshot diffs, cloud buckets, and dorks. Stage 4 covers subdomain brute-force, email permutations, resurrection mapping, and link rot. Stage 5 covers URLKEY analytics, redirect chains, page-tree reconstruction, and credential correlation. Stage 6 covers raw evidence export, coverage reporting, and cache warmup.)*
@@ -761,17 +886,21 @@ Diagram (flow):
 
 Each phase independently transitions through the same lifecycle, visible live in the TUI dashboard:
 
-```text
-Diagram (flow):
-  Pending --> Skipped
-  Pending --> Running
-  Running --> Fetching
-  Fetching --> Parsing
-  Parsing --> Scoring
-  Scoring --> Cached
-  Cached --> Complete
-  Running --> Interrupted
-  Interrupted --> PartialFlush
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+    Pending --> Skipped : filtered by selection
+    Pending --> Running : dependencies satisfied
+    Running --> Fetching : acquisition step
+    Fetching --> Parsing : normalization step
+    Parsing --> Scoring : correlation step
+    Scoring --> Cached : persisted to SQLite
+    Cached --> Complete
+    Skipped --> [*]
+    Complete --> [*]
+    Running --> Interrupted : manual interrupt
+    Interrupted --> PartialFlush : partial report flushed
+    PartialFlush --> [*]
 ```
 
 ---
@@ -780,40 +909,65 @@ Diagram (flow):
 
 ### End-to-end scan sequence
 
-```text
-Diagram (elements):
-  - optional
-  - 47 phases
-  - if active phase
-  - phase progress
-  - optional, any time
+```mermaid
+sequenceDiagram
+    actor OP as Operator
+    participant CLI as CLI/TUI
+    participant ENG as Phase Engine
+    participant ARC as Archive Sources
+    participant LIVE as Live Target
+    participant DB as SQLite Cache
+    participant REP as Report Engine
+
+    OP->>CLI: set target example.com
+    OP->>CLI: select capabilities (optional)
+    OP->>CLI: run
+    CLI->>ENG: start pipeline (47 phases)
+    loop Each enabled phase
+        ENG->>ARC: acquire historical data
+        ARC-->>ENG: CDX / snapshots / CT logs
+        ENG->>LIVE: read-only verification (if active phase)
+        LIVE-->>ENG: headers / DNS / TLS / status
+        ENG->>ENG: normalize + correlate + score
+        ENG->>DB: persist findings
+        ENG-->>CLI: telemetry (phase progress)
+    end
+    OP->>CLI: Ctrl+C (optional, any time)
+    CLI->>REP: flush partial or complete report
+    REP->>DB: read all findings
+    REP-->>OP: JSON / CSV / HTML / TXT + raw evidence bundle
 ```
 
 ### Secret-discovery data flow
 
-```text
-Diagram (flow):
-  Pattern Match / (regex library --> Entropy / sufficient?
-  Entropy / sufficient? --(No)--> Discard / (placeholder/example
-  Entropy / sufficient? --(Yes)--> Context Extraction / (surrounding lines
-  Context Extraction / (surrounding lines --> Severity Scoring
-  Severity Scoring --> Provenance Tagging / first/last seen + source
-  Provenance Tagging / first/last seen + source --> Evidence Cache
-  Evidence Cache --> Duplicate Collapse / across snapshots
-  Duplicate Collapse / across snapshots --> Credential Correlation / (cross-reference entities
-  Credential Correlation / (cross-reference entities --> Report Output
+```mermaid
+flowchart LR
+    A["Archived Body\n(JS / .env / SQL / config)"] --> B["Pattern Match\n(regex library)"]
+    B --> C{"Entropy\nsufficient?"}
+    C -->|No| D["Discard\n(placeholder/example)"]
+    C -->|Yes| E["Context Extraction\n(surrounding lines)"]
+    E --> F["Severity Scoring"]
+    F --> G["Provenance Tagging\nfirst/last seen + source"]
+    G --> H[("Evidence Cache")]
+    H --> I["Duplicate Collapse\nacross snapshots"]
+    I --> J["Credential Correlation\n(cross-reference entities)"]
+    J --> K["Report Output"]
+
+    style D fill:#1a0a0a,stroke:#666,color:#999
+    style K fill:#0a1a0a,stroke:#39ff14,color:#eaffea
 ```
 
 ### Subdomain resolution decision tree
 
-```text
-Diagram (flow):
-  DNS / resolves? --(No)--> Historical-only record / → OSINT value, no live risk
-  DNS / resolves? --(Yes)--> CNAME points to / de-provisioned service?
-  CNAME points to / de-provisioned service? --(Yes)--> 🎯 Takeover Candidate / (flagged HIGH severity
-  CNAME points to / de-provisioned service? --(No)--> Live HTTP / responds?
-  Live HTTP / responds? --(No)--> Resolves but unreachable / → noted, low priority
-  Live HTTP / responds? --(Yes)--> Live Asset / → fed into full recon pipeline
+```mermaid
+flowchart TD
+    A["Candidate Subdomain\n(from archive / CT / brute-force)"] --> B{"DNS\nresolves?"}
+    B -->|No| C["Historical-only record\n→ OSINT value, no live risk"]
+    B -->|Yes| D{"CNAME points to\nde-provisioned service?"}
+    D -->|Yes| E["🎯 Takeover Candidate\n(flagged HIGH severity)"]
+    D -->|No| F{"Live HTTP\nresponds?"}
+    F -->|No| G["Resolves but unreachable\n→ noted, low priority"]
+    F -->|Yes| H["Live Asset\n→ fed into full recon pipeline"]
 ```
 
 ---
@@ -822,12 +976,19 @@ Diagram (flow):
 
 StrataScan ships two first-class interfaces built on the exact same engine:
 
-```text
-Diagram (flow):
-  sys.argv has / non-flag arg? --(Yes)--> CLI Mode / run_cli(
-  sys.argv has / non-flag arg? --(No)--> TUI Mode / run_tui(
-  CLI Mode / run_cli( --> stdout + report files
-  TUI Mode / run_tui( --> Live log panel / + stats panel / + help panel / + command bar
+```mermaid
+flowchart LR
+    subgraph ENTRY["Entry Point"]
+        ARGV{"sys.argv has\nnon-flag arg?"}
+    end
+    ARGV -->|Yes| CLI["CLI Mode\nrun_cli()\nscriptable, batch-friendly"]
+    ARGV -->|No| TUI["TUI Mode\nrun_tui()\ncurses dashboard"]
+
+    CLI --> OUT1["stdout + report files"]
+    TUI --> OUT2["Live log panel\n+ stats panel\n+ help panel\n+ command bar"]
+
+    style CLI fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
+    style TUI fill:#0a0e14,stroke:#9d4dff,color:#f0e6ff
 ```
 
 ### CLI Mode
@@ -942,12 +1103,15 @@ run
 
 StrataScan produces four interchangeable report formats, plus an optional raw evidence bundle, from the same underlying finding set.
 
-```text
-Diagram (flow):
-  SQLite / Evidence Cache --> 📊 CSV / one row per URL, / spreadsheet-friendly
-  SQLite / Evidence Cache --> 🌐 HTML / dark-themed, / severity-color-coded
-  SQLite / Evidence Cache --> 📝 TXT / full detailed / narrative report
-  SQLite / Evidence Cache --(if raw mode)--> 🗃 Raw Evidence Bundle / findings.jsonl + / raw_snapshots/ + / provenance + coverage
+```mermaid
+flowchart LR
+    DB[("SQLite\nEvidence Cache")] --> J["📄 JSON\nmachine-readable,\nfull fidelity"]
+    DB --> C["📊 CSV\none row per URL,\nspreadsheet-friendly"]
+    DB --> H["🌐 HTML\ndark-themed,\nseverity-color-coded"]
+    DB --> T["📝 TXT\nfull detailed\nnarrative report"]
+    DB -->|if raw mode| R["🗃 Raw Evidence Bundle\nfindings.jsonl +\nraw_snapshots/ +\nprovenance + coverage"]
+
+    style DB fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
 ```
 
 | Format | Best for |
@@ -1000,13 +1164,17 @@ Understanding what StrataScan **does and does not** expose a target to is essent
 - Unauthorized access to computer systems, unauthorized use of discovered credentials, and unauthorized disclosure of discovered secrets are illegal in most jurisdictions (e.g., the U.S. Computer Fraud and Abuse Act, the UK Computer Misuse Act, and equivalents elsewhere) regardless of what tooling was used to find the vulnerability.
 - The maintainers of StrataScan assume no liability for misuse. This tool is published for authorized security research, bug bounty participation, and organizational self-audit.
 
-```text
-Diagram (flow):
-  Do you own it, / or have written / authorization? --(Yes)--> ✅ Proceed within / defined scope
-  Do you own it, / or have written / authorization? --(No)--> 🛑 Do not scan
-  ✅ Proceed within / defined scope --> Finding involves / a live secret?
-  Finding involves / a live secret? --(Yes)--> Report to owner, / do not use it, / allow remediation time
-  Finding involves / a live secret? --(No)--> Document in report
+```mermaid
+flowchart TD
+    A["Before running StrataScan\nagainst any domain"] --> B{"Do you own it,\nor have written\nauthorization?"}
+    B -->|Yes| C["✅ Proceed within\ndefined scope"]
+    B -->|No| D["🛑 Do not scan"]
+    C --> E{"Finding involves\na live secret?"}
+    E -->|Yes| F["Report to owner,\ndo not use it,\nallow remediation time"]
+    E -->|No| G["Document in report"]
+
+    style D fill:#3a0a0a,stroke:#ff3b3b,color:#ffd6d6
+    style C fill:#0a2a0a,stroke:#39ff14,color:#eaffea
 ```
 
 ---
@@ -1084,12 +1252,13 @@ run
 
 This alone reconstructs: every CDX-indexed snapshot, every certificate-transparency SAN ever issued for the domain, WHOIS/RDAP registration history, passive-DNS records from third-party aggregators, parsed `robots.txt`/`sitemap.xml` history, and historical disallow-rule diffs — all without a single packet reaching `acme-example.test` itself.
 
-```text
-Diagram (flow):
-  31 subdomains / ever referenced --> 6 subdomains / no longer resolve
-  31 subdomains / ever referenced --> 2 subdomains / CNAME to dead cloud resource
-  47 archived snapshots / found (2016–2026 --> 112 archived documents / (PDF/DOCX/XLSX
-  112 archived documents / (PDF/DOCX/XLSX --> 4 documents / with internal author metadata
+```mermaid
+flowchart LR
+    A["47 archived snapshots\nfound (2016–2026)"] --> B["31 subdomains\never referenced"]
+    B --> C["6 subdomains\nno longer resolve"]
+    B --> D["2 subdomains\nCNAME to dead cloud resource"]
+    A --> E["112 archived documents\n(PDF/DOCX/XLSX)"]
+    E --> F["4 documents\nwith internal author metadata"]
 ```
 
 ### Step 2 — Full pipeline with live verification
@@ -1165,12 +1334,16 @@ The phase count reflects the natural dependency graph of the underlying data: ar
 
 Every secret and sensitive finding is scored, not just matched. The model combines three independent signals:
 
-```text
-Diagram (flow):
-  Tier --("score ≥ 0.8")--> 🔴 CRITICAL
-  Tier --("0.5 ≤ score < 0.8")--> 🟠 HIGH
-  Tier --("0.25 ≤ score < 0.5")--> 🟡 MEDIUM
-  Tier --("score < 0.25")--> ⚪ LOW
+```mermaid
+flowchart LR
+    CTX["Context Weight\n(where it was found:\n.env > JS comment > minified bundle)"] --> SCORE
+    ENT["Entropy Score\n(randomness of the\nmatched string)"] --> SCORE
+    ROT["Rotation Likelihood\n(age + whether it still\nmatches a live pattern)"] --> SCORE
+    SCORE["Composite Severity\nscore = f(context, entropy, rotation)"] --> TIER{Tier}
+    TIER -->|"score ≥ 0.8"| CRIT["🔴 CRITICAL"]
+    TIER -->|"0.5 ≤ score < 0.8"| HIGH["🟠 HIGH"]
+    TIER -->|"0.25 ≤ score < 0.5"| MED["🟡 MEDIUM"]
+    TIER -->|"score < 0.25"| LOW["⚪ LOW"]
 ```
 
 | Tier | Criteria (typical) | Example |
@@ -1240,15 +1413,18 @@ A representative (fully redacted) excerpt from a JSON report, illustrating the r
 
 StrataScan uses a bounded `concurrent.futures` thread pool for all network I/O, with per-host throttling layered on top so parallelism never translates into target-side burst traffic.
 
-```text
-Diagram (flow):
-  Bounded Thread Pool --> Token Bucket: / archive.org
-  Bounded Thread Pool --> Token Bucket: / target host
-  Bounded Thread Pool --> Token Bucket: / third-party APIs / (crt.sh, HackerTarget, etc.
-  Token Bucket: / archive.org --> Adaptive Jitter / (archive.org only
-  Token Bucket: / target host --> Target Response
-  Token Bucket: / third-party APIs / (crt.sh, HackerTarget, etc. --> Third-Party Response
-  Adaptive Jitter / (archive.org only --> Archive Response
+```mermaid
+flowchart TB
+    Q["Request Queue\n(all phases feed into it)"] --> POOL["Bounded Thread Pool"]
+    POOL --> TB1["Token Bucket:\narchive.org"]
+    POOL --> TB2["Token Bucket:\ntarget host"]
+    POOL --> TB3["Token Bucket:\nthird-party APIs\n(crt.sh, HackerTarget, etc.)"]
+    TB1 --> J["Adaptive Jitter\n(archive.org only)"]
+    TB2 --> OUT1["Target Response"]
+    TB3 --> OUT2["Third-Party Response"]
+    J --> OUT3["Archive Response"]
+
+    style POOL fill:#0a0e14,stroke:#00c2ff,color:#e6f7ff
 ```
 
 - **Thread pool, not process pool** — I/O-bound workload, so GIL contention is negligible relative to network latency.
@@ -1260,11 +1436,24 @@ Diagram (flow):
 
 ## 🔄 Proxy & User-Agent Rotation
 
-```text
-Diagram (elements):
-  - Chrome/Firefox/Edge, multiple versions/OSes
-  - if pool loaded
-  - rotated UA + proxy
+```mermaid
+sequenceDiagram
+    participant R as Request
+    participant UA as UA Rotator
+    participant PX as Proxy Pool
+    participant T as Target/Source
+
+    R->>UA: next request
+    UA->>UA: pick from real-browser UA list<br/>(Chrome/Firefox/Edge, multiple versions/OSes)
+    UA-->>R: UA header
+    R->>PX: request proxy (if pool loaded)
+    PX->>PX: round-robin / health-aware selection
+    PX-->>R: proxy endpoint
+    R->>T: outbound request (rotated UA + proxy)
+    T-->>R: response
+    alt proxy failed
+        R->>PX: mark unhealthy, retry with next
+    end
 ```
 
 - Load a proxy list with `proxy load <file>` (compatible with common public proxy-list formats, e.g. `host:port` per line).
@@ -1588,18 +1777,19 @@ Selecting any single capability automatically pulls in the phase(s) it belongs t
 
 ### Dependency graph (core chain)
 
-```text
-Diagram (flow):
-  p01 FETCHING CDX INDEX / (root dependency --> p04 HARVESTING HEADERS
-  p01 FETCHING CDX INDEX / (root dependency --> p18 DELETION FORENSICS
-  p01 FETCHING CDX INDEX / (root dependency --> p03 MAPPING TOPOLOGY
-  p01 FETCHING CDX INDEX / (root dependency --> p14 CONTENT INTEL
-  p14 CONTENT INTEL --> p16 SOURCE MAP HARVESTING
-  p03 MAPPING TOPOLOGY --> p19 TAKEOVER PROBE
-  p03 MAPPING TOPOLOGY --> p23 DOCUMENT METADATA
-  p18 DELETION FORENSICS --> p30 RESURRECTION MAP
-  p14 CONTENT INTEL --> p44 CREDENTIAL CORRELATION
-  p14 CONTENT INTEL --> p29 EMAIL PERMUTATIONS
+```mermaid
+flowchart TD
+    CDX["p01 FETCHING CDX INDEX\n(root dependency)"]
+    CDX --> HEADERS[p04 HARVESTING HEADERS]
+    CDX --> DEL[p18 DELETION FORENSICS]
+    CDX --> TOPO[p03 MAPPING TOPOLOGY]
+    CDX --> CI[p14 CONTENT INTEL]
+    CI --> SM[p16 SOURCE MAP HARVESTING]
+    TOPO --> TAKE[p19 TAKEOVER PROBE]
+    TOPO --> DOC[p23 DOCUMENT METADATA]
+    DEL --> RES[p30 RESURRECTION MAP]
+    CI --> CRED[p44 CREDENTIAL CORRELATION]
+    CI --> EMAIL[p29 EMAIL PERMUTATIONS]
 ```
 ## License
 
